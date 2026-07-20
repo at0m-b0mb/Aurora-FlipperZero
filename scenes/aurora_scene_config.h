@@ -1,0 +1,5 @@
+ADD_SCENE(aurora, start, Start)
+ADD_SCENE(aurora, scan, Scan)
+ADD_SCENE(aurora, settings, Settings)
+ADD_SCENE(aurora, controls, Controls)
+ADD_SCENE(aurora, about, About)

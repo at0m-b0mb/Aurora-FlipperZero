@@ -1,0 +1,23 @@
+App(
+    appid="aurora",
+    name="Aurora",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="aurora_app",
+    stack_size=4 * 1024,
+    fap_category="Sub-GHz",
+    fap_icon="icons/aurora_10px.png",
+    fap_icon_assets="icons",
+    fap_author="at0m-b0mb",
+    fap_weburl="https://github.com/at0m-b0mb/Aurora-FlipperZero",
+    fap_version="1.0",
+    # Explicit, so the recursive default does not sweep test/ (host-only code)
+    # into the firmware build.
+    sources=[
+        "aurora.c",
+        "helpers/*.c",
+        "views/*.c",
+        "scenes/*.c",
+    ],
+    fap_description="Band waterfall scanner. Sweeps the internal CC1101 across a Sub-GHz band 64 steps at a time and draws what it hears as a live spectrum above a scrolling waterfall, so a burst that lasted a tenth of a second is still on screen seconds later. Move a cursor to read any channel in MHz and dBm, zoom from the whole ISM band down to 2 MHz around a single carrier, hold the display to study a burst, and snap straight to the loudest signal in the sweep. The noise floor is measured from each sweep, so it calibrates itself wherever you are. Listen-only, never transmits.",
+    requires=["gui"],
+)

@@ -102,6 +102,12 @@ static void scan_snap_peak(AuroraApp* app) {
 
 /* ---------------- frame ---------------- */
 
+/* Is `freq` within the window the snapshot was actually measured against? Used
+ * to decide whether the marker (or its dB) can be drawn this frame. */
+static bool freq_on_window(const AurPlan* p, uint32_t freq) {
+    return freq >= aur_bin_freq(p, 0) && freq <= aur_bin_freq(p, AUR_BINS - 1);
+}
+
 static void scan_publish(AuroraApp* app) {
     ScannerUi ui;
     memset(&ui, 0, sizeof(ui));
@@ -112,10 +118,44 @@ static void scan_publish(AuroraApp* app) {
     /* Against the snapshot's plan, not the live one: a retune takes a sweep to
      * land, and for that one frame the cursor must line up with the data that
      * is actually on screen. */
-    ui.cursor_bin = aur_freq_bin(&app->snap->plan, app->cursor_freq);
+    const AurPlan* sp = &app->snap->plan;
+    ui.cursor_bin = aur_freq_bin(sp, app->cursor_freq);
     ui.show_hint = furi_get_tick() < app->hint_until;
 
+    if(app->marker_set) {
+        ui.marker_set = true;
+        ui.marker_on = freq_on_window(sp, app->marker_freq);
+        ui.marker_bin = aur_freq_bin(sp, app->marker_freq);
+        /* Signed, and computed in 64 bits before the cast: two frequencies a
+         * whole band apart differ by more than an int32 can hold as an
+         * intermediate on some paths, and the sign is the whole point. */
+        ui.delta_hz = (int32_t)((int64_t)app->cursor_freq - (int64_t)app->marker_freq);
+
+        uint8_t cbin = ui.cursor_bin;
+        int16_t cur = app->snap->dbm[cbin];
+        int16_t mk = app->snap->dbm[ui.marker_bin];
+        ui.delta_db_valid = ui.marker_on && freq_on_window(sp, app->cursor_freq) &&
+                            cur != AUR_DBM_INVALID && mk != AUR_DBM_INVALID;
+        ui.delta_db = (int16_t)(cur - mk);
+    }
+
     scanner_view_update(app->scanner_view, app->snap, &ui);
+}
+
+/* Drop the marker at the cursor, or clear it if the cursor is already on it. */
+static void scan_toggle_marker(AuroraApp* app) {
+    if(app->marker_set) {
+        uint8_t mb = aur_freq_bin(&app->plan, app->marker_freq);
+        uint8_t cb = aur_freq_bin(&app->plan, app->cursor_freq);
+        if(mb == cb) {
+            app->marker_set = false;
+            aurora_notify_edge(app); // a lower tone: the marker is gone
+            return;
+        }
+    }
+    app->marker_set = true;
+    app->marker_freq = app->cursor_freq;
+    aurora_notify_click(app);
 }
 
 /* ---------------- scene ---------------- */
@@ -129,6 +169,7 @@ void aurora_scene_scan_on_enter(void* context) {
     if(app->plan.band != app->settings.band_index) {
         aur_plan_init(&app->plan, app->settings.band_index);
         app->cursor_freq = app->plan.center;
+        app->marker_set = false; // a marker on the old band is meaningless here
     }
 
     aurora_apply_settings(app);
@@ -183,6 +224,9 @@ bool aurora_scene_scan_on_event(void* context, SceneManagerEvent event) {
         case ScannerEventToggleHold:
             app->hold = !app->hold;
             aurora_notify_click(app);
+            break;
+        case ScannerEventToggleMarker:
+            scan_toggle_marker(app);
             break;
         default:
             break;

@@ -15,10 +15,11 @@
 
 #include "helpers/aur_scale.h"
 #include "helpers/aur_sweep.h"
+#include "helpers/aur_settings.h"
 #include "views/scanner_view.h"
 #include "scenes/aurora_scene.h"
 
-#define AURORA_VERSION "1.0"
+#define AURORA_VERSION "1.1"
 
 /** How long the control legend stays up when the scanner opens, in ms. */
 #define AURORA_HINT_MS 2600
@@ -44,15 +45,6 @@ typedef enum {
 extern const uint8_t aurora_range_db[AURORA_RANGE_COUNT];
 
 typedef struct {
-    uint8_t band_index; /* index into aur_bands */
-    uint8_t detail; /* AurDetail            */
-    uint8_t peak_mode; /* AurPeakMode          */
-    uint8_t range_index; /* index into aurora_range_db */
-    bool sound;
-    bool led;
-} AuroraSettings;
-
-typedef struct {
     Gui* gui;
     ViewDispatcher* view_dispatcher;
     SceneManager* scene_manager;
@@ -69,13 +61,19 @@ typedef struct {
      * thread's stack, so it lives on the heap for the app's whole life. */
     AurSweepSnapshot* snap;
 
-    AuroraSettings settings;
+    AurSettings settings; /* persisted across reboots */
 
     /* live scanner state */
     AurPlan plan;
     uint32_t cursor_freq;
     uint8_t mode; /* AurViewMode */
     bool hold;
+
+    /* measurement marker: a frequency you drop to read Δf / ΔdB against the
+     * cursor. Stored as a frequency so it survives zoom and pan. */
+    bool marker_set;
+    uint32_t marker_freq;
+
     uint32_t hint_until;
     uint32_t last_hit_events;
     uint32_t last_alert;
@@ -83,6 +81,9 @@ typedef struct {
 
 /** Push every setting into the sweeper. */
 void aurora_apply_settings(AuroraApp* app);
+
+/** Persist current settings to the SD card (best effort). */
+void aurora_save_settings(AuroraApp* app);
 
 /* feedback, gated by settings */
 void aurora_notify_hit(AuroraApp* app);

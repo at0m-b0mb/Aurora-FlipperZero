@@ -38,14 +38,14 @@
 <p align="center">
   <img src="images/screen_zoom.png"      width="30%" alt="Zoomed to 2.4 MHz around one carrier">
   &nbsp;
-  <img src="images/screen_hold.png"      width="30%" alt="Display frozen with HOLD">
+  <img src="images/screen_marker.png"    width="30%" alt="Marker dropped — Δf and ΔdB to the cursor">
   &nbsp;
-  <img src="images/screen_menu.png"      width="30%" alt="Menu">
+  <img src="images/screen_hold.png"      width="30%" alt="Display frozen with HOLD">
 </p>
 <p align="center">
   <sub><b>Split</b> — spectrum + waterfall &nbsp;·&nbsp; <b>Waterfall</b> — full height &nbsp;·&nbsp;
   <b>Spectrum</b> — full height + activity map &nbsp;·&nbsp; <b>Zoomed</b> onto one carrier &nbsp;·&nbsp;
-  <b>HOLD</b> &nbsp;·&nbsp; <b>Menu</b></sub>
+  <b>Marker</b> — Δf / ΔdB to the cursor &nbsp;·&nbsp; <b>HOLD</b></sub>
 </p>
 
 ---
@@ -62,8 +62,13 @@
   signal down to a 2.4 MHz window without ever losing it.
 - 📍 **A cursor that answers the question.** Frequency in **MHz** and level in **dBm**, live, for any
   bin. Push past the edge of a zoomed window and the window pans.
+- 📐 **A marker for measuring gaps.** Drop a marker on one signal (**hold ↑**), move the cursor to
+  another, and the strip reads the live **Δ frequency and Δ dB** between them — channel spacing,
+  harmonic offsets and level differences without arithmetic.
 - 🎯 **Hold OK to snap to the strongest signal.** One button, from anywhere in the band, straight
   onto whatever is loudest.
+- 💾 **Your setup sticks.** Band, detail, range, peak mode and the view you left on are saved to the
+  SD card and restored next launch.
 - 🧊 **Freeze the display.** Hold Back and the waterfall stops scrolling, so you can study a burst
   that has already ended instead of watching it slide off the bottom.
 - 🧮 **A noise floor that measures itself.** The floor is the **lower quartile of each sweep's own
@@ -162,6 +167,7 @@ make -C test    # run the scale-engine unit tests on your machine
 | --- | --- |
 | **← / →** | Move the cursor one bin. **Hold** to scrub; push past an edge and the window pans. |
 | **↑ / ↓** | Zoom in / out, centred **on the cursor**. |
+| **↑ (hold)** | Drop a **marker** at the cursor — or clear it if the cursor is already on it. |
 | **OK** | Cycle the view: **Split → Waterfall → Spectrum**. |
 | **OK (hold)** | Snap the cursor onto the **strongest bin** in the sweep. |
 | **Back (hold)** | **Freeze** the display. Hold again to resume. |
@@ -181,6 +187,15 @@ there's a full **Controls** page in the menu.
    at one channel.
 5. **Hold Back** to freeze if the burst was short and you want to study it.
 
+### Measuring a gap with the marker
+
+1. Put the cursor on the first signal and **hold ↑** to drop a marker — a tab-topped dashed line
+   stays behind at that frequency.
+2. Move the cursor to a second signal. The strip's right slot now reads the **frequency and dB
+   difference** between the two, updating live: e.g. `▫ +12.33M +7`.
+3. Great for **channel spacing**, spotting a **harmonic** (is that peak exactly 2× the other?), or
+   comparing two signals' strength. **Hold ↑** again on the marker to clear it.
+
 ### Reading the display
 
 | What you see | What it means |
@@ -191,8 +206,9 @@ there's a full **Controls** page in the menu.
 | Thin caps above the bars | **Peak trace** (Settings → Peak trace) |
 | Dotted row under the bars | Round-frequency gridlines |
 | Solid block on the axis | Cursor |
+| Tab-topped dashed line | **Marker** (when dropped) |
 | Strip, left | Current span — or **HOLD** when frozen |
-| Strip, right | ▲ Loudest bin right now, MHz and dBm |
+| Strip, right | ▲ Loudest bin right now — or, with a marker down, **Δf and ΔdB** to it |
 | Band under the header rule *(Spectrum view)* | **Activity map** — every bin that has been busy since you tuned here |
 | Notches on the right edge *(Waterfall view)* | One-second time ticks, from the **measured** sweep rate |
 
@@ -258,10 +274,11 @@ it. Know your local laws.
 
 ## 🗺️ Roadmap
 
-- [ ] Persist band / detail / range across reboots
+- [x] Persist band / detail / range across reboots — *v1.1*
+- [x] A marker with a live Δf / ΔdB readout to the cursor — *v1.1*
 - [ ] Export a sweep or a waterfall capture to the SD card (CSV) for offline plotting
 - [ ] A max-hold overlay accumulated over minutes, for long unattended surveys
-- [ ] Markers you can drop and label, with a delta readout between two of them
+- [ ] A second marker, for a delta measured between two fixed points
 - [ ] Optional external-CC1101 support, so a better antenna can drive the sweep
 
 ---
@@ -273,8 +290,9 @@ Aurora-FlipperZero/
 ├── application.fam              # Flipper app manifest (category: Sub-GHz)
 ├── aurora.c / aurora_i.h        # app entry, wiring, feedback, settings
 ├── helpers/
-│   ├── aur_scale.{c,h}          # pure engine — bins, zoom, floor, dither (host-tested)
-│   └── aur_sweep.{c,h}          # CC1101 sweeper thread + waterfall ring buffer
+│   ├── aur_scale.{c,h}          # pure engine — bins, zoom, floor, dither, Δ-format (host-tested)
+│   ├── aur_sweep.{c,h}          # CC1101 sweeper thread + waterfall ring buffer
+│   └── aur_settings.{c,h}       # load/save settings to the SD card (FlipperFormat)
 ├── views/
 │   └── scanner_view.{c,h}       # the display: spectrum, waterfall, cursor, strip
 ├── scenes/                      # start · scan · settings · controls · about

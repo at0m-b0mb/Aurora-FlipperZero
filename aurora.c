@@ -58,6 +58,13 @@ void aurora_apply_settings(AuroraApp* app) {
     aur_sweep_set_range_db(app->sweep, aurora_range_db[app->settings.range_index]);
 }
 
+void aurora_save_settings(AuroraApp* app) {
+    furi_assert(app);
+    /* The view you leave on is part of the state worth keeping. */
+    app->settings.view_mode = app->mode;
+    aur_settings_save(&app->settings);
+}
+
 /* ---------------- view dispatcher plumbing ---------------- */
 
 static bool aurora_custom_event_callback(void* context, uint32_t event) {
@@ -94,14 +101,9 @@ static AuroraApp* aurora_app_alloc(void) {
      * waterfall itself is buffered by the sweeper so no row is ever dropped. */
     view_dispatcher_set_tick_event_callback(app->view_dispatcher, aurora_tick_event_callback, 50);
 
-    // defaults
-    app->settings.band_index = 1; // 387-464 MHz
-    app->settings.detail = AurDetailNormal;
-    app->settings.peak_mode = AurPeakDecay;
-    app->settings.range_index = 1; // 50 dB
-    app->settings.sound = true;
-    app->settings.led = true;
-    app->mode = AurModeSplit;
+    // settings: whatever was last saved, or the built-in defaults on first run
+    aur_settings_load(&app->settings);
+    app->mode = app->settings.view_mode;
 
     app->sweep = aur_sweep_alloc();
     app->snap = malloc(sizeof(AurSweepSnapshot));
@@ -137,6 +139,10 @@ static AuroraApp* aurora_app_alloc(void) {
 
 static void aurora_app_free(AuroraApp* app) {
     furi_assert(app);
+
+    /* Last chance to persist - covers the view mode, which only ever changes
+     * inside the scanner and so is never saved by the settings screen. */
+    aurora_save_settings(app);
 
     aur_sweep_stop(app->sweep);
 

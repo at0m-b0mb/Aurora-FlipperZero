@@ -93,4 +93,5 @@ void aurora_scene_settings_on_exit(void* context) {
     /* Detail, range and peak mode take effect on the next sweep. Band is
      * handled by the scan scene, which rebuilds the plan around it. */
     aurora_apply_settings(app);
+    aurora_save_settings(app);
 }

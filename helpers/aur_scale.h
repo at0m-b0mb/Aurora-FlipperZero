@@ -97,6 +97,15 @@ uint32_t aur_clamp_cursor(const AurPlan* p, uint32_t freq);
 /** A round tick spacing giving roughly 4-8 gridlines across the span. */
 uint32_t aur_tick_step(uint32_t span);
 
+/**
+ * Format a signed frequency difference for the marker readout: "+37k",
+ * "-120k", "+1.23M". Picks kHz below a megahertz and MHz above, so a delta
+ * stays legible whether the two points are one bin or half a band apart.
+ * `buf` must be at least 16 bytes (a paranoid worst case, since the format
+ * checker assumes %lu prints ten digits).
+ */
+void aur_fmt_delta_hz(char* buf, uint8_t len, int32_t hz);
+
 /* ---- levels ---- */
 
 /**

@@ -4,6 +4,26 @@ All notable changes to Aurora are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1] — 2026-07-24
+
+### Added
+
+- **Measurement marker.** Hold **↑** to drop a marker at the cursor; the status strip then reads the
+  live **Δ frequency and Δ dB** between the cursor and the marker, so channel spacing, harmonic
+  offsets and level differences read straight off the screen. Hold **↑** again on the marker to
+  clear it. The marker is stored as a frequency, so it survives zoom and pan, and is drawn as a
+  tab-topped dashed guide distinct from the cursor. A band change clears it.
+- **Persistent settings.** Band, detail, range, peak-trace mode, sound, LED and the view you leave
+  on are saved to `/ext/apps_data/aurora/aurora.conf` (FlipperFormat) and restored on launch. The
+  file is human-readable, and every field is range-clamped on load, so a hand-edited or
+  version-skewed file can never push a setting out of bounds.
+
+### Changed
+
+- The transient control legend gained a third line for the marker gesture.
+- `helpers/aur_scale.c` now also formats the signed marker delta (`aur_fmt_delta_hz`), covered by the
+  host tests — **3330 checks** total.
+
 ## [1.0] — 2026-07-18
 
 First release.

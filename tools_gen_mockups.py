@@ -220,6 +220,15 @@ def fmt_span(hz):
     return "%d.%dM" % (hz // 1_000_000, (hz % 1_000_000) // 100_000)
 
 
+def fmt_delta(hz):
+    """Mirror of aur_fmt_delta_hz: kHz below a megahertz, MHz above."""
+    sign = "-" if hz < 0 else "+"
+    khz = (abs(hz) + 500) // 1000
+    if khz >= 1000:
+        return "%s%d.%02dM" % (sign, khz // 1000, (khz % 1000) // 10)
+    return "%s%dk" % (sign, khz)
+
+
 # ---------------- synthetic RF ----------------
 
 FLOOR = -97
@@ -285,7 +294,7 @@ def draw_caret_up(d, x, y, col=FG):
         line(d, x - i, y + i, x + i, y + i, col)
 
 
-def draw_strip(d, plan, strongest, hold=False):
+def draw_strip(d, plan, strongest, hold=False, delta=None):
     box(d, 0, SV_STRIP_Y, W, SV_STRIP_H)
     if hold:
         rbox(d, 2, 54, 27, 9, 2, BG)
@@ -293,11 +302,34 @@ def draw_strip(d, plan, strongest, hold=False):
     else:
         text(d, 3, SV_STRIP_BASE, fmt_span(plan.span), f_sec, BG)
 
-    if strongest is not None:
+    if delta is not None:
+        dhz, ddb = delta
+        s = fmt_delta(dhz) if ddb is None else "%s %+d" % (fmt_delta(dhz), ddb)
+        text(d, 125, SV_STRIP_BASE, s, f_sec, BG, anchor="rs")
+        w = tw(s)
+        tabx = 125 - w - 6
+        box(d, tabx, 55, 4, 4, BG)
+        frame(d, tabx, 55, 4, 4, FG, lw=2)
+    elif strongest is not None:
         sbin, sdbm = strongest
         s = "%s %d" % (fmt_mhz2(plan.bin_freq(sbin)), sdbm)
         text(d, 125, SV_STRIP_BASE, s, f_sec, BG, anchor="rs")
         draw_caret_up(d, 125 - tw(s) - 5, 56, BG)
+
+
+def draw_marker(d, mx, top, bottom):
+    """Mirror of the C: a coarse two-tone dashed guide with a top tab."""
+    box(d, mx - 1, top, 4, 3, BG)
+    frame(d, mx - 1, top, 4, 3, FG, lw=2)
+    y = top + 3
+    while y <= bottom:
+        dot(d, mx, y, BG)
+        if y + 1 <= bottom:
+            dot(d, mx, y + 1, BG)
+        dot(d, mx + 1, y, FG)
+        if y + 1 <= bottom:
+            dot(d, mx + 1, y + 1, FG)
+        y += 4
 
 
 def draw_axis(d, plan, axis):
@@ -315,7 +347,7 @@ def draw_axis(d, plan, axis):
         f += step
 
 
-def draw_spectrum(d, plan, dbm, peak, cursor_bin, top, axis):
+def draw_spectrum(d, plan, dbm, peak, cursor_bin, top, axis, marker_bin=None):
     height = axis - top
     for i in range(AUR_BINS):
         x = i * 2
@@ -329,13 +361,16 @@ def draw_spectrum(d, plan, dbm, peak, cursor_bin, top, axis):
 
     draw_axis(d, plan, axis)
 
+    if marker_bin is not None:
+        draw_marker(d, marker_bin * 2, top, axis - 1)
+
     cx = cursor_bin * 2
     for y in range(top, axis - 1, 2):
         dot(d, cx, y)
     box(d, cx, axis - 1, 2, 3)
 
 
-def draw_waterfall(d, hist, cursor_bin, top, rows, time_ticks=False, rate10=140):
+def draw_waterfall(d, hist, cursor_bin, top, rows, time_ticks=False, rate10=140, marker_bin=None):
     drawn = min(rows, len(hist))
     for r in range(drawn):
         y = top + r
@@ -349,6 +384,9 @@ def draw_waterfall(d, hist, cursor_bin, top, rows, time_ticks=False, rate10=140)
                 dot(d, x, y)
             if dither(lvl, x + 1, y):
                 dot(d, x + 1, y)
+
+    if marker_bin is not None:
+        draw_marker(d, marker_bin * 2, top, top + rows - 1)
 
     cx = cursor_bin * 2
     for y in range(top, top + rows, 2):
@@ -375,10 +413,11 @@ def draw_hits(d, hits, y):
 
 
 def draw_hint(d):
-    rbox(d, 3, 28, 122, 22, 3, BG)
-    rframe(d, 3, 28, 122, 22, 3, FG)
-    text(d, 64, 36, "<> cursor    ^v zoom", f_sec, FG, anchor="mm")
-    text(d, 64, 45, "OK view   hold OK snap", f_sec, FG, anchor="mm")
+    rbox(d, 3, 26, 122, 26, 3, BG)
+    rframe(d, 3, 26, 122, 26, 3, FG)
+    text(d, 64, 33, "<> cursor   ^v zoom", f_sec, FG, anchor="mm")
+    text(d, 64, 41, "OK view  hold OK snap", f_sec, FG, anchor="mm")
+    text(d, 64, 49, "hold ^ = drop marker", f_sec, FG, anchor="mm")
 
 
 # ---------------- scenes ----------------
@@ -497,6 +536,32 @@ def render_hold():
     save(img, "screen_hold.png")
 
 
+def render_marker():
+    """Marker on one carrier, cursor on another: the strip reads the Δf / ΔdB
+    between them - here, the spacing between two 433-band signals."""
+    img, d = canvas()
+    plan = Plan(1, zoom=2, focus=440_000_000)
+    rng = LCG(0x11A6)
+    carriers = [(433_920_000, -44, 1.0), (446_050_000, -58, 1.0), (438_800_000, -80, 1.3)]
+    dbm = sweep(plan, carriers, rng)
+    peak = [v + (3 if i % 5 else 5) for i, v in enumerate(dbm)]
+
+    marker = plan.freq_bin(433_920_000)
+    cursor = plan.freq_bin(446_050_000)
+
+    bursts = [lambda r: (r // 5) % 2 == 0, lambda r: True, lambda r: r % 2 == 0]
+    hist = history(plan, carriers, bursts, seed=0x9C9C)
+
+    dhz = plan.bin_freq(cursor) - plan.bin_freq(marker)
+    ddb = dbm[cursor] - dbm[marker]
+
+    draw_header(d, plan.bin_freq(cursor), dbm[cursor])
+    draw_spectrum(d, plan, dbm, peak, cursor, SV_TOP, SV_SPLIT_AXIS, marker_bin=marker)
+    draw_waterfall(d, hist, cursor, SV_SPLIT_WF_TOP, SV_SPLIT_WF_ROWS, marker_bin=marker)
+    draw_strip(d, plan, None, delta=(dhz, ddb))
+    save(img, "screen_marker.png")
+
+
 def render_hint():
     img, d = canvas()
     plan = Plan(1)
@@ -560,6 +625,7 @@ NAMES = (
     "screen_waterfall.png",
     "screen_spectrum.png",
     "screen_zoom.png",
+    "screen_marker.png",
     "screen_hold.png",
     "screen_hint.png",
     "screen_menu.png",
@@ -588,6 +654,7 @@ if __name__ == "__main__":
     render_waterfall()
     render_spectrum()
     render_zoom()
+    render_marker()
     render_hold()
     render_hint()
     render_menu()

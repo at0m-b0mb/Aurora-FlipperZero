@@ -1,5 +1,7 @@
 #include "aur_scale.h"
 
+#include <stdio.h> /* snprintf, for the marker delta readout */
+
 /* The three ranges flipperzero-firmware will let a FAP tune. Staying inside
  * them is why the sweep never has to draw a "blocked" column in practice - but
  * the sweeper still checks each bin, because the firmware is the authority. */
@@ -123,6 +125,24 @@ uint32_t aur_tick_step(uint32_t span) {
         if(span / steps[i] <= 8) return steps[i];
     }
     return steps[n - 1];
+}
+
+void aur_fmt_delta_hz(char* buf, uint8_t len, int32_t hz) {
+    const char* sign = hz < 0 ? "-" : "+";
+    /* Fold to unsigned before negating, so INT32_MIN cannot overflow. Real
+     * deltas are bounded by a band width (< 150 MHz), but the guard is free. */
+    uint32_t mag = hz < 0 ? (uint32_t)(-(int64_t)hz) : (uint32_t)hz;
+
+    /* Round to the nearest kHz first, then decide the unit off the rounded
+     * value - otherwise 999.6 kHz would print as "1000k" instead of "1.00M". */
+    uint32_t khz = (mag + 500u) / 1000u;
+    if(khz >= 1000u) {
+        uint32_t mhz = khz / 1000u;
+        uint32_t frac = (khz % 1000u) / 10u; /* two decimals */
+        snprintf(buf, len, "%s%lu.%02luM", sign, (unsigned long)mhz, (unsigned long)frac);
+    } else {
+        snprintf(buf, len, "%s%luk", sign, (unsigned long)khz);
+    }
 }
 
 int16_t aur_percentile(const int16_t* vals, uint8_t n, uint8_t k) {

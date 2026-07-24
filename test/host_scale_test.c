@@ -337,6 +337,43 @@ static void test_dither(void) {
     }
 }
 
+static void test_delta_format(void) {
+    section("the marker delta reads right on both sides of zero");
+    char b[16];
+
+    aur_fmt_delta_hz(b, sizeof(b), 0);
+    CHECK(strcmp(b, "+0k") == 0, "zero was '%s'", b);
+
+    aur_fmt_delta_hz(b, sizeof(b), 37000);
+    CHECK(strcmp(b, "+37k") == 0, "+37 kHz was '%s'", b);
+
+    aur_fmt_delta_hz(b, sizeof(b), -120000);
+    CHECK(strcmp(b, "-120k") == 0, "-120 kHz was '%s'", b);
+
+    /* Rounds to the nearest kHz. */
+    aur_fmt_delta_hz(b, sizeof(b), 37400);
+    CHECK(strcmp(b, "+37k") == 0, "+37.4 kHz was '%s'", b);
+    aur_fmt_delta_hz(b, sizeof(b), 37600);
+    CHECK(strcmp(b, "+38k") == 0, "+37.6 kHz was '%s'", b);
+
+    /* Crosses to MHz at a megahertz, two decimals. */
+    aur_fmt_delta_hz(b, sizeof(b), 1230000);
+    CHECK(strcmp(b, "+1.23M") == 0, "+1.23 MHz was '%s'", b);
+    aur_fmt_delta_hz(b, sizeof(b), -77000000);
+    CHECK(strcmp(b, "-77.00M") == 0, "-77 MHz was '%s'", b);
+
+    /* The unit is chosen from the ROUNDED value, so 999.6 kHz is not "1000k". */
+    aur_fmt_delta_hz(b, sizeof(b), 999600);
+    CHECK(strcmp(b, "+1.00M") == 0, "999.6 kHz was '%s'", b);
+    aur_fmt_delta_hz(b, sizeof(b), 999000);
+    CHECK(strcmp(b, "+999k") == 0, "999 kHz was '%s'", b);
+
+    /* A whole-band delta still fits the documented 16-byte buffer. */
+    aur_fmt_delta_hz(b, sizeof(b), -149000000);
+    CHECK(strcmp(b, "-149.00M") == 0, "-149 MHz was '%s'", b);
+    CHECK(strlen(b) < 16, "delta string overran the buffer: '%s'", b);
+}
+
 int main(void) {
     printf("Aurora - scale engine tests\n");
 
@@ -347,6 +384,7 @@ int main(void) {
     test_bin_roundtrip();
     test_bin_saturates();
     test_tick_step();
+    test_delta_format();
     test_percentile();
     test_scaling();
     test_dither();

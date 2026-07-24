@@ -32,6 +32,7 @@ typedef enum {
     ScannerEventCycleMode,
     ScannerEventSnapPeak, /* park the cursor on the strongest bin */
     ScannerEventToggleHold, /* freeze the display */
+    ScannerEventToggleMarker, /* drop / clear the measurement marker */
 } ScannerViewEvent;
 
 typedef void (*ScannerViewEventCallback)(void* context, ScannerViewEvent event);
@@ -44,6 +45,14 @@ typedef struct {
     uint32_t cursor_freq;
     uint8_t cursor_bin;
     bool show_hint; /* transient control legend           */
+
+    /* measurement marker + the live delta to the cursor */
+    bool marker_set;
+    bool marker_on; /* marker bin falls inside the drawn window */
+    uint8_t marker_bin;
+    int32_t delta_hz; /* cursor - marker                          */
+    bool delta_db_valid; /* both points are on-window this sweep     */
+    int16_t delta_db;
 } ScannerUi;
 
 typedef struct ScannerView ScannerView;

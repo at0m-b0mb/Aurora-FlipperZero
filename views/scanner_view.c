@@ -78,6 +78,30 @@ static void draw_caret_up(Canvas* c, int x, int y) {
         canvas_draw_line(c, x - i, y + i, x + i, y + i);
 }
 
+/**
+ * The measurement marker. A coarser, two-tone dashed guide than the cursor's
+ * fine dotted one, capped with a little tab at the top - so the two are never
+ * confused, and the marker stays visible over both bright signal and dark
+ * noise in the waterfall. `mx` is the marker's left pixel column.
+ */
+static void draw_marker(Canvas* c, int mx, int top, int bottom) {
+    /* top tab: a white block with a black outline, readable on any background */
+    canvas_set_color(c, ColorWhite);
+    canvas_draw_box(c, mx - 1, top, 4, 3);
+    canvas_set_color(c, ColorBlack);
+    canvas_draw_frame(c, mx - 1, top, 4, 3);
+
+    for(int y = top + 3; y <= bottom; y += 4) {
+        canvas_set_color(c, ColorWhite);
+        canvas_draw_dot(c, mx, y);
+        if(y + 1 <= bottom) canvas_draw_dot(c, mx, y + 1);
+        canvas_set_color(c, ColorBlack);
+        canvas_draw_dot(c, mx + 1, y);
+        if(y + 1 <= bottom) canvas_draw_dot(c, mx + 1, y + 1);
+    }
+    canvas_set_color(c, ColorBlack);
+}
+
 /* ---------------- faces ---------------- */
 
 static void draw_header(Canvas* c, const ScannerModel* m) {
@@ -119,7 +143,25 @@ static void draw_strip(Canvas* c, const ScannerModel* m) {
         canvas_draw_str(c, 3, SV_STRIP_BASE, buf);
     }
 
-    if(sn->strongest_dbm != AUR_DBM_INVALID) {
+    if(m->ui.marker_set) {
+        /* A marker means you care about the delta now, so it takes the strip's
+         * right slot from the strongest-bin readout: a tab icon echoing the
+         * on-plot flag, then Δf, then ΔdB when both points are on-window this
+         * sweep. (A drawn tab, not a 'Δ' glyph the built-in font may not have.) */
+        char dfreq[16];
+        aur_fmt_delta_hz(dfreq, sizeof(dfreq), m->ui.delta_hz);
+        if(m->ui.delta_db_valid)
+            snprintf(buf, sizeof(buf), "%s %+d", dfreq, (int)m->ui.delta_db);
+        else
+            snprintf(buf, sizeof(buf), "%s", dfreq);
+        canvas_draw_str_aligned(c, 125, SV_STRIP_BASE, AlignRight, AlignBottom, buf);
+        int w = canvas_string_width(c, buf);
+        int tabx = 125 - w - 6;
+        canvas_draw_box(c, tabx, 55, 4, 4); // white on the inverted strip
+        canvas_set_color(c, ColorBlack);
+        canvas_draw_frame(c, tabx, 55, 4, 4);
+        canvas_set_color(c, ColorWhite);
+    } else if(sn->strongest_dbm != AUR_DBM_INVALID) {
         uint32_t pf = aur_bin_freq(&sn->plan, sn->strongest_bin);
         char fbuf[12];
         fmt_mhz2(fbuf, sizeof(fbuf), pf);
@@ -179,6 +221,8 @@ static void draw_spectrum(Canvas* c, const ScannerModel* m, int top, int axis) {
 
     draw_axis(c, &sn->plan, axis);
 
+    if(m->ui.marker_set && m->ui.marker_on) draw_marker(c, m->ui.marker_bin * 2, top, axis - 1);
+
     /* Cursor: dotted down the trace, solid where it meets the axis. */
     int cx = m->ui.cursor_bin * 2;
     draw_dotted_v(c, cx, top, axis - 2);
@@ -200,6 +244,9 @@ static void draw_waterfall(Canvas* c, const ScannerModel* m, int top, int rows, 
             if(aur_dither(lvl, (uint8_t)(x + 1), (uint8_t)y)) canvas_draw_dot(c, x + 1, y);
         }
     }
+
+    if(m->ui.marker_set && m->ui.marker_on)
+        draw_marker(c, m->ui.marker_bin * 2, top, top + rows - 1);
 
     /* Cursor guide, drawn as a two-tone barber pole: a white column beside a
      * black one, so it stays visible over bright signal and dark noise alike. */
@@ -234,13 +281,17 @@ static void draw_hits(Canvas* c, const ScannerModel* m, int y) {
 }
 
 static void draw_hint(Canvas* c) {
+    /* Transient primer only - the Controls page carries the full reference,
+     * so this shows the four gestures a first run most needs and keeps every
+     * line inside the ~22 characters FontSecondary fits across the box. */
     canvas_set_color(c, ColorWhite);
-    canvas_draw_rbox(c, 3, 28, 122, 22, 3);
+    canvas_draw_rbox(c, 3, 26, 122, 26, 3);
     canvas_set_color(c, ColorBlack);
-    canvas_draw_rframe(c, 3, 28, 122, 22, 3);
+    canvas_draw_rframe(c, 3, 26, 122, 26, 3);
     canvas_set_font(c, FontSecondary);
-    canvas_draw_str_aligned(c, 64, 36, AlignCenter, AlignCenter, "<> cursor    ^v zoom");
-    canvas_draw_str_aligned(c, 64, 45, AlignCenter, AlignCenter, "OK view   hold OK snap");
+    canvas_draw_str_aligned(c, 64, 33, AlignCenter, AlignCenter, "<> cursor   ^v zoom");
+    canvas_draw_str_aligned(c, 64, 41, AlignCenter, AlignCenter, "OK view  hold OK snap");
+    canvas_draw_str_aligned(c, 64, 49, AlignCenter, AlignCenter, "hold ^ = drop marker");
 }
 
 static void draw_waiting(Canvas* c) {
@@ -336,6 +387,12 @@ static bool scanner_view_input(InputEvent* event, void* context) {
     if(event->type == InputTypeLong) {
         if(event->key == InputKeyOk) {
             emit(v, ScannerEventSnapPeak);
+            return true;
+        }
+        /* Long-up drops or clears the marker. Up's short press zooms and its
+         * repeat is ignored, so the long press is free and unambiguous. */
+        if(event->key == InputKeyUp) {
+            emit(v, ScannerEventToggleMarker);
             return true;
         }
         /* Long-back freezes. Consuming only the Long leaves a short Back to
